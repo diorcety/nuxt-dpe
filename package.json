@@ -1,0 +1,18 @@
+{
+  "name": "nuxt-dpe38",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "nuxt dev",
+    "build": "nuxt build",
+    "generate": "nuxt generate",
+    "preview": "nuxt preview"
+  },
+  "dependencies": {
+    "leaflet": "^1.9.4",
+    "nuxt": "latest",
+    "prettier": "^3.6.2",
+    "proj4": "^2.8.0",
+    "vue": "^3.3.0"
+  }
+}
