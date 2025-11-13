@@ -1,5 +1,6 @@
 // Nuxt 3 config
 export default defineNuxtConfig({
+  compatibilityDate: "2025-09-28",
   ssr: false,
   app: {
     head: {

@@ -151,6 +151,7 @@ const loaded = ref(false);
 
 // States
 const isDev = computed(() => process.env.NODE_ENV === "development");
+const selectedLayer = ref("osm"); // default layer
 const isControlsCollapsed = ref(false); // Initially, the controls are not collapsed
 const loading = ref(false); // Track loading state
 const logs = ref([]);
@@ -179,6 +180,7 @@ function readUrlParams() {
   lat.value = parseFloat(params.get("lat")) || 45.75;
   long.value = parseFloat(params.get("long")) || 4.85;
   zoom.value = parseInt(params.get("zoom")) || 10;
+  selectedLayer.value = params.get("layer") || "osm";
 
   loaded.value = JSON.parse(params.get("loaded")) || false;
   isControlsCollapsed.value =
@@ -204,6 +206,7 @@ function updateUrlParams() {
 
   params.set("loaded", loaded.value);
   params.set("controls_collapsed", isControlsCollapsed.value);
+  params.set("layer", selectedLayer.value);
 
   // Update the URL without reloading the page
   window.history.replaceState({}, "", "?" + params.toString());
@@ -328,26 +331,43 @@ function addRowsToMap(rows) {
       const y = parseFloat(row.coordonnee_cartographique_y_ban);
       if (Number.isNaN(x) || Number.isNaN(y)) continue;
       const { lat, lon } = lambert93ToWgs84(x, y);
-      const name = row.numero_dpe || "Inconnu";
-      const desc = row.adresse_ban || "";
+      const ndpe = row.numero_dpe || "Inconnu";
+      const addr = row.adresse_ban || "";
       const popupHtml = `
   <div style="font-family: Arial, sans-serif; font-size: 14px; color: #333; padding: 8px; line-height: 1.5;">
     <b>
-      <a 
-        href="https://observatoire-dpe-audit.ademe.fr/afficher-dpe/${name}" 
-        target="_blank" 
+      <a
+        href="https://observatoire-dpe-audit.ademe.fr/afficher-dpe/${ndpe}"
+        target="_blank"
         style="text-decoration: none; color: #388E3C; font-weight: bold;"
       >
-        ${escapeHtml(name)}
+        ${escapeHtml(ndpe)}
       </a>
     </b>
     <br>
-    <a 
-      href="https://www.openstreetmap.org/search?query=${desc}" 
-      target="_blank" 
-      style="text-decoration: none; color: #2196F3; font-size: 13px;"
+    ${escapeHtml(addr)}
+    <a
+      href="https://www.openstreetmap.org/search?query=${addr}"
+      target="_blank"
+      style="text-decoration: none;"
     >
-      ${escapeHtml(desc)}
+      <img
+        src="/osm-icon.svg"
+        alt="OpenStreetMap"
+        style="width: 16px; height: 16px; vertical-align: middle;"
+      />
+    </a>
+
+    <a
+      href="https://www.google.com/maps/search/?api=1&query=${addr}"
+      target="_blank"
+      style="text-decoration: none;"
+    >
+      <img
+        src="/google-maps-icon.svg"
+        alt="Google Maps"
+        style="width: 16px; height: 16px; vertical-align: middle;"
+      />
     </a>
     <br>
     <small style="color: #888;">
@@ -400,11 +420,50 @@ onMounted(async () => {
   readUrlParams();
 
   map = L.map("map").setView([lat.value, long.value], zoom.value);
-  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-    maxZoom: 19,
-    attribution: "&copy; OpenStreetMap contributors",
-  }).addTo(map);
+  const osmLayer = L.tileLayer(
+    "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    {
+      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap contributors",
+    },
+  );
+
+  const satelliteLayer = L.tileLayer(
+    "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    {
+      maxZoom: 19,
+      attribution:
+        "Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community",
+    },
+  );
+
+  // Choose the right layer based on URL or default
+  if (selectedLayer.value === "satellite") {
+    satelliteLayer.addTo(map);
+  } else {
+    osmLayer.addTo(map);
+  }
+
+  // Keep track of both
+  const baseLayers = {
+    "Carte (OSM)": osmLayer,
+    "Satellite (Esri)": satelliteLayer,
+  };
+
+  // Layer switcher control
+  L.control
+    .layers(baseLayers, null, { collapsed: true, position: "bottomleft" })
+    .addTo(map);
+
   markersLayer = L.featureGroup().addTo(map);
+
+  // Detect when user switches layers
+  map.on("baselayerchange", (e) => {
+    selectedLayer.value = e.name.toLowerCase().includes("satellite")
+      ? "satellite"
+      : "osm";
+    updateUrlParams();
+  });
 
   // Update URL parameters when the map moves or zooms
   map.on("moveend", () => {
